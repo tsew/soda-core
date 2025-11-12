@@ -1,4 +1,4 @@
-# Debian-slim variant that keeps image small but allows installing Microsoft ODBC & RPM drivers.
+# Debian-slim variant that keeps image small but allows apt installs for build deps.
 FROM python:3.9-slim-bullseye
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -7,31 +7,36 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH"
 
+# Install build/runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        curl \
-        ca-certificates \
-        lsb-release \
-        gnupg2 \
-        unixodbc-dev \
-        odbcinst \
-        git \
-        python3-venv \
-        libpq-dev \
-        libssl-dev \
-        libffi-dev \
-        tzdata && \
-    ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
+    build-essential \
+    curl \
+    ca-certificates \
+    lsb-release \
+    gnupg2 \
+    unixodbc-dev \
+    odbcinst \
+    git \
+    python3-venv \
+    libpq-dev \
+    libssl-dev \
+    libffi-dev \
+    tzdata && \
     rm -rf /var/lib/apt/lists/*
 
+# Copy the full repository into the image so any local path dependencies in
+# requirements.txt (for example ./soda/core) exist when pip runs.
+COPY . /app
 WORKDIR /app
 
-COPY requirements.txt .
+# Create venv and install requirements (now local paths referenced in requirements.txt are present)
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip setuptools wheel \
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# Create and use an isolated venv for all Python packages (clean venv installation).
-RUN python3 -m venv /opt/venv && \
-    /opt/venv/bin/pip install --upgrade pip setuptools wheel && \
-    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+# (rest of Dockerfile: copy entrypoint/users etc)
+# ENTRYPOINT ["soda"]
+CMD ["scan"]
 
 # Install Microsoft ODBC driver (keeps the same steps you had; note compatibility caveats)
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
@@ -47,9 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends alien && \
     apt-get purge -y --auto-remove alien && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy application sources (do this after dependency installation to maximize build cache)
-COPY . .
-
 # Entrypoint uses venv-installed console scripts thanks to PATH including /opt/venv/bin
 ENTRYPOINT ["soda"]
+
 CMD ["scan"]
