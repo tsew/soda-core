@@ -1,8 +1,7 @@
 name: Build Docker image for Soda Core
 
 on:
-  repository_dispatch:
-    types: [started-from-version-tag]
+  workflow_dispatch:
 
 jobs:
   docker:
