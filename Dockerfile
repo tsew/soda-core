@@ -47,7 +47,14 @@ RUN pip install --upgrade pip
 
 COPY . .
 
-RUN pip --no-cache-dir install -r requirements.txt
+RUN python3 -m venv /opt/venv && \
+    . /opt/venv/bin/activate && \
+    pip install --upgrade pip setuptools wheel && \
+    pip --no-cache-dir install -r requirements.txt
+
+# Make the venv the default PATH for subsequent steps
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+ENV PATH="/opt/venv/bin:$PATH"
 
 RUN apt-get purge -y build-essential git curl && \
     apt-get clean -qq -y && \
