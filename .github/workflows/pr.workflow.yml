@@ -1,7 +1,7 @@
 name: PR pipeline
 
 on:
-  pull_request:
+  workflow_dispatch:
 
 env:
   telemetry_local_debug_mode: true

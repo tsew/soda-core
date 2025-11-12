@@ -1,13 +1,7 @@
 name: CI pipeline
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "*"
-  schedule:
-    - cron: "0 0 * * *"
+  workflow_dispatch:
 env:
   telemetry_local_debug_mode: true
 
