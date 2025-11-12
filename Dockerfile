@@ -1,58 +1,55 @@
-FROM ubuntu:22.04
+# Debian-slim variant that keeps image small but allows installing Microsoft ODBC & RPM drivers.
+FROM python:3.9-slim-bullseye
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Etc/UTC
-ENV LC_ALL=C.UTF-8
-ENV LANG=C.UTF-8
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Etc/UTC \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
 
-# install dependencies
-RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get remove -y python3.10 && \
-    apt-get install -y --no-install-recommends software-properties-common gnupg2 && \
-    add-apt-repository ppa:deadsnakes/ppa && \
-    apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends \
-    procps \
-    build-essential curl \
-    libpq-dev \
-    libssl-dev libffi-dev \
-    python3.9 python3.9-dev python3.9-venv libpython3.9-dev libpython3.9 \
-    python3.9-distutils \
-    unixodbc-dev git lsb-release \
-    alien odbcinst
-
-#sqlserver support - see https://techcommunity.microsoft.com/t5/sql-server/odbc-drivers-for-ubuntu-22-04/m-p/3469347/highlight/true#M1668
-RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
-    curl https://packages.microsoft.com/config/ubuntu/21.04/prod.list | tee /etc/apt/sources.list.d/mssql-release.list && \
-    apt-get update && \
-    ACCEPT_EULA=Y apt-get install -y libsasl2-dev odbcinst mssql-tools18 msodbcsql18 unixodbc-dev
-
-# Dremio support
-RUN curl -L https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm -o arrow-driver.rpm && \
-    alien -iv --scripts arrow-driver.rpm
-
-RUN apt-get clean -qq -y && \
-    apt-get autoclean -qq -y && \
-    apt-get autoremove -qq -y && \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        curl \
+        ca-certificates \
+        lsb-release \
+        gnupg2 \
+        unixodbc-dev \
+        odbcinst \
+        git \
+        python3-venv \
+        libpq-dev \
+        libssl-dev \
+        libffi-dev \
+        tzdata && \
+    ln -sf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     rm -rf /var/lib/apt/lists/*
-RUN ln -s /usr/bin/python3.9 /usr/bin/python && \
-    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
-    python3.9 get-pip.py
 
 WORKDIR /app
 
-RUN pip install --upgrade pip
+COPY requirements.txt .
 
+# Create and use an isolated venv for all Python packages (clean venv installation).
+RUN python3 -m venv /opt/venv && \
+    /opt/venv/bin/pip install --upgrade pip setuptools wheel && \
+    /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# Install Microsoft ODBC driver (keeps the same steps you had; note compatibility caveats)
+RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/ubuntu/21.04/prod.list | tee /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && ACCEPT_EULA=Y apt-get install -y --no-install-recommends msodbcsql18 mssql-tools unixodbc-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install Dremio ODBC driver via RPM conversion (alien). alien is installed transiently to perform the conversion.
+RUN apt-get update && apt-get install -y --no-install-recommends alien && \
+    curl -L https://download.dremio.com/arrow-flight-sql-odbc-driver/arrow-flight-sql-odbc-driver-LATEST.x86_64.rpm -o arrow-driver.rpm && \
+    alien -iv --scripts arrow-driver.rpm && \
+    rm -f arrow-driver.rpm && \
+    apt-get purge -y --auto-remove alien && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy application sources (do this after dependency installation to maximize build cache)
 COPY . .
 
-RUN pip --no-cache-dir install -r requirements.txt
-
-RUN apt-get purge -y build-essential git curl && \
-    apt-get clean -qq -y && \
-    apt-get autoclean -qq -y && \
-    apt-get autoremove -qq -y
-
-ENTRYPOINT [ "soda" ]
-CMD [ "scan" ]
+# Entrypoint uses venv-installed console scripts thanks to PATH including /opt/venv/bin
+ENTRYPOINT ["soda"]
+CMD ["scan"]
