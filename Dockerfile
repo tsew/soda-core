@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     libssl-dev \
     libffi-dev \
+    libsasl2-dev \
     tzdata && \
     rm -rf /var/lib/apt/lists/*
 
