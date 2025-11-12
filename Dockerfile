@@ -35,10 +35,6 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip setuptools wheel \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# (rest of Dockerfile: copy entrypoint/users etc)
-# ENTRYPOINT ["soda"]
-CMD ["scan"]
-
 # Install Microsoft ODBC driver (keeps the same steps you had; note compatibility caveats)
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
     curl https://packages.microsoft.com/config/ubuntu/21.04/prod.list | tee /etc/apt/sources.list.d/mssql-release.list && \
